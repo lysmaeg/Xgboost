@@ -86,3 +86,48 @@ model = xgb.XGBClassifier(
 Les valeurs exactes dépendent des données : on les choisit en pratique par validation croisée. L'important est le **sens** de chaque réglage (arbres peu profonds, régularisation renforcée, `learning_rate` faible avec beaucoup d'arbres).
 
 </details>
+
+### Exercice d'application : QCM
+
+Une seule réponse est correcte par question.
+
+**1. Quelle information XGBoost utilise-t-il en plus du gradient de la fonction de perte pour construire ses arbres ?**
+- A. La moyenne des erreurs
+- B. La dérivée seconde (hessienne)
+- C. La médiane des prédictions
+- D. Le nombre de variables
+
+**2. Quel est le principe commun au Gradient Boosting classique et à XGBoost ?**
+- A. Entraîner des arbres indépendants en parallèle et faire une moyenne
+- B. Utiliser un seul arbre très profond
+- C. Ajouter des arbres successifs, chacun corrigeant les erreurs du modèle courant
+- D. Réduire le nombre de variables avant l'entraînement
+
+**3. Quel paramètre de XGBoost représente le coût d'ajout d'une feuille supplémentaire ?**
+- A. `gamma`
+- B. `lambda`
+- C. `alpha`
+- D. `n_estimators`
+
+**4. Parmi ces propositions, laquelle est vraie pour XGBoost par rapport au Gradient Boosting classique ?**
+- A. Il ne peut jamais surapprendre
+- B. Il offre plus de leviers pour contrôler le surapprentissage, mais est plus complexe à régler
+- C. Il n'a aucun hyperparamètre à régler
+- D. Il est toujours plus performant
+
+**5. Quels sont les hyperparamètres communs aux deux algorithmes, et ceux propres à XGBoost ?**
+- A. Communs : `gamma`, `lambda`, `alpha` ; propres à XGBoost : `n_estimators`, `learning_rate`
+- B. Communs : `gamma` et `lambda` ; propres à XGBoost : `max_depth`
+- C. Communs : `n_estimators`, `learning_rate`, `max_depth` ; propres à XGBoost : `gamma`, `lambda`, `alpha`
+- D. Aucun paramètre n'est commun aux deux algorithmes
+
+<details>
+<summary><b>Corrigé</b></summary>
+
+1. **B.** XGBoost s'appuie sur une approximation d'ordre 2 de la perte : il utilise le gradient et la hessienne, ce qui permet des corrections plus précises que le gradient seul.
+2. **C.** Les deux sont des méthodes de *boosting* : les arbres sont construits un par un et la prédiction finale est la somme de leurs contributions. La proposition A décrit plutôt une forêt aléatoire.
+3. **A.** `gamma` pénalise le nombre de feuilles (terme $\gamma T$) : une coupure n'est effectuée que si le gain dépasse ce coût. `lambda` et `alpha` pénalisent les valeurs des feuilles (L2 et L1).
+4. **B.** XGBoost ajoute des paramètres de régularisation, ce qui donne plus de contrôle mais demande un réglage plus fin. Il peut surapprendre et n'est pas automatiquement meilleur sur tous les jeux de données.
+5. **C.** `n_estimators` (nombre d'arbres), `learning_rate` (contribution de chaque arbre) et `max_depth` (profondeur des arbres) sont communs. `gamma`, `lambda` et `alpha` sont les paramètres de régularisation propres à XGBoost dans cette comparaison.
+
+</details>
