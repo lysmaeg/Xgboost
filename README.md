@@ -18,3 +18,15 @@ Cette partie compare le **Gradient Boosting classique** et **XGBoost**, deux mé
 | **Régularisation** | Indirecte : profondeur des arbres, taux d'apprentissage. | **Explicite** : `gamma`, `lambda`, `alpha`. | Plus de réglages pour éviter que le modèle apprenne le bruit. |
 | **Fonction de perte** | Choisie selon le problème : erreur quadratique, perte logistique, etc. | Même principe : `reg:squarederror` (régression), `binary:logistic` (classification binaire), `multi:softprob` (classification multiclasse). | Les deux acceptent plusieurs pertes ; XGBoost demande seulement qu'elles soient dérivables deux fois (gradient et hessienne). |
 | **Hyperparamètres** | Principalement `n_estimators`, `learning_rate` et `max_depth`. | Les mêmes, plus des paramètres de régularisation : `gamma`, `lambda`, `alpha`. | Plus flexible pour contrôler le surapprentissage, mais plus complexe à régler. |
+
+### Synthèse
+
+Le Gradient Boosting et XGBoost reposent sur le **même principe** : construire des arbres les uns après les autres, chacun corrigeant les erreurs de l'ensemble précédent. Les deux acceptent différentes fonctions de perte et partagent les mêmes hyperparamètres de base (`n_estimators`, `learning_rate`, `max_depth`).
+
+La différence se situe dans **la façon de construire les arbres** :
+
+- **Plus d'information** : XGBoost exploite le gradient **et** la dérivée seconde (hessienne) de la perte, ce qui lui permet des corrections plus précises que le gradient seul.
+- **Complexité contrôlée** : XGBoost intègre une régularisation explicite (`gamma`, `lambda`, `alpha`) dans la fonction qu'il minimise, alors que le Gradient Boosting classique se limite à des contraintes indirectes (profondeur, taux d'apprentissage).
+- **Contrepartie** : ces paramètres supplémentaires rendent XGBoost plus flexible pour limiter le surapprentissage, mais aussi plus complexe à calibrer.
+
+**En résumé** : XGBoost peut être vu comme une version « régularisée et optimisée » du Gradient Boosting. Il offre plus de leviers pour maîtriser le modèle, au prix d'un réglage plus délicat.
