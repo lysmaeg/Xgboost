@@ -57,7 +57,7 @@ Dans le notebook, `xgb.cv` est lancé avec `nrounds = 300` et `early_stopping_ro
 - **si on définit nrounds = 9999…9, la fonction xgb.cv continuera à s'exécuter jusqu'à la fin du monde**  (faux)
 - **Je dois faire 300 tours autour de l'arbre**  (faux)
 
-*Explication : les deux premières sont vraies (`niter = best_iteration + early_stopping_rounds`, et on retient le meilleur tour). Fausses : même avec `nrounds` énorme, l'arrêt anticipé stoppe dès que la validation ne progresse plus ; et la dernière est une blague.*
+*Explication : les deux premières sont vraies (`niter = best_iteration + early_stopping_rounds`, et on retient le meilleur tour). Fausses : même avec `nrounds` énorme, l'arrêt anticipé stoppe dès que la validation ne progresse plus et la dernière est une blague.*
 
 ---
 
@@ -70,7 +70,7 @@ Lesquels de ces points sont des avantages de XGBoost ?
 - **La validation croisée intégrée : sans packages externes** 
 - Une meilleure performance que le gradient boosting classique : XGBoost est plus performant
 
-*Explication : régularisation, parallélisation et validation croisée intégrée sont bien des atouts de XGBoost. En revanche, rien ne garantit une meilleure performance, sur ce TP, son AUC est quasi identique à celle de gbm — il est surtout plus rapide et plus flexible, pas automatiquement plus précis.*
+*Explication : régularisation, parallélisation et validation croisée intégrée sont bien des atouts de XGBoost. En revanche, rien ne garantit une meilleure performance, sur ce TP, son AUC est quasi identique à celle de gbm, il est surtout plus rapide et plus flexible, pas automatiquement plus précis.*
 
 ---
 
