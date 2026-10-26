@@ -9,11 +9,11 @@
 | 3. Validation croisée | `nfold = ____` | `10` |
 | 4. Modèle final | `nrounds = ____` | `ite_opt` |
 
-### À expliquer — pourquoi `p = 0.70` ?
+### pourquoi `p = 0.70` ?
 
 C'est une convention, pas une règle absolue. En séparant les données, on arbitre entre deux besoins, un jeu d'entraînement assez grand pour bien apprendre, et un jeu de test assez grand pour une évaluation fiable. 70/30 (ou 80/20) est le compromis le plus courant. Ici, 50 000 vols, 35 000 pour l'entraînement, 15 000 pour le test (largement suffisant, l'AUC est stable).
 
-### À expliquer — pourquoi `nfold = 10` ?
+### pourquoi `nfold = 10` ?
 
 La validation croisée découpe le train en 10 groupes, on entraîne sur 9, on valide sur 1, et on tourne. Chaque groupe sert une fois de validation. On moyenne les 10 résultats pour obtenir une estimation plus stable de la performance.
 
@@ -23,7 +23,7 @@ Pourquoi 10 ? C'est un compromis, comme pour le split.
 
 10 n'est pas une valeur optimale calculée, c'est le palier standard, assez précis sans être trop lent. 5 folds donnerait un résultat similaire, un peu moins stable.
 
-### À expliquer — pourquoi `nrounds = ite_opt` ?
+### pourquoi `nrounds = ite_opt` ?
 
 `ite_opt` est le nombre d'arbres choisi par la validation croisée (`best_iteration`). On le **réutilise** pour le modèle final au lieu de refixer un nombre à la main : c'est tout l'intérêt d'avoir fait la CV à l'étape précédente.
 
