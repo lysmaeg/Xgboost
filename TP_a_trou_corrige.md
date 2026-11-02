@@ -1,42 +1,35 @@
+# TP XGBoost à trou — Corrigé enseignant
 
-# Corrigé du notebook TP_XGBoost_a_trou.ipynb.
+> Corrigé du notebook `TP_a_trou.ipynb`. Version centrée sur les **hyperparamètres et leur effet sur l'apprentissage**. Support présenté en classe (trous posés comme questions à la salle). À ne pas distribuer aux étudiants.
 
-## Réponses aux trous (code)
+## Réponses aux trous (valeurs à tester)
 
-| Section | Trou | Réponse |
-| --- | --- | --- |
-| 2. Split train / test | p = ____ | 0.70 |
-| 3. Validation croisée | nfold = ____ | 10 |
-| 4. Modèle final | nrounds = ____ | ite_opt |
+Les trous sont des **valeurs à essayer** : l'objectif est d'observer l'effet, pas de trouver une seule bonne réponse. On lance avec la 1re valeur, puis la 2e, et on compare.
 
-### pourquoi p = 0.70 ?
+| Section | Trou | Valeurs à tester | Ce qu'on observe |
+| --- | --- | --- | --- |
+| 3. `eta` | `evaluer(eta = ____)` | `0.01` puis `0.3` | 0.01 (+ 100 arbres) → AUC plus basse (sous-apprentissage) ; 0.3 → apprend plus vite, AUC plus haute |
+| 4. `max_depth` | `evaluer(max_depth = ____)` | `1` puis `12` | depth 1 → simple, AUC modérée ; depth 12 → AUC train très haute, AUC test qui décroche → surapprentissage |
+| 5. `nrounds` | `evaluer(nrounds = ____)` | `10` puis `500` | 10 → sous-apprentissage ; 500 → train ↑↑, test plafonne (rendement décroissant) |
 
-C'est une convention, pas une règle absolue. En séparant les données, on arbitre entre deux besoins, un jeu d'entraînement assez grand pour bien apprendre, et un jeu de test assez grand pour une évaluation fiable. 70/30 (ou 80/20) est le compromis le plus courant. Ici, 50 000 vols, 35 000 pour l'entraînement, 15 000 pour le test (largement suffisant, l'AUC est stable).
-
-### pourquoi nfold = 10 ?
-
-La validation croisée découpe le train en 10 groupes, on entraîne sur 9, on valide sur 1, et on tourne. Chaque groupe sert une fois de validation. On moyenne les 10 résultats pour obtenir une estimation plus stable de la performance.
-
-Pourquoi 10 ? C'est un compromis, comme pour le split. 
-1. Plus de folds = estimation plus précise, mais plus lent. À l'extrême, autant de folds que d'observations très précis, mais des milliers d'entraînements, trop lent. Moins de folds = plus rapide, mais estimation plus instable.
-2. 10 (parfois 5) est le choix standard, reconnu comme le bon équilibre entre fiabilité et temps de calcul. On le retrouve partout dans les cours et les articles.
-
-10 n'est pas une valeur optimale calculée, c'est le palier standard, assez précis sans être trop lent. 5 folds donnerait un résultat similaire, un peu moins stable.
-
-### pourquoi nrounds = ite_opt ?
-
-ite_opt est le nombre d'arbres choisi par la validation croisée (best_iteration). On le réutilise pour le modèle final au lieu de refixer un nombre à la main : c'est tout l'intérêt d'avoir fait la CV à l'étape précédente.
+*La section 6 (validation croisée) n'a pas de trou : on exécute et on lit `best_iteration`.*
 
 ## Réponses aux questions d'interprétation
 
-**Question 1 — Classes équilibrées ?**
+**Section 3 — `eta` (taux d'apprentissage).**
+`eta` fixe le poids de chaque nouvel arbre. Petit (0.01) → chaque arbre contribue peu, l'apprentissage est lent : avec seulement 100 arbres, le modèle n'a pas eu le temps d'apprendre → AUC plus basse (sous-apprentissage). Plus grand (0.3) → apprend plus vite, meilleure AUC ici. (Un `eta` trop grand peut aussi rendre l'apprentissage instable ; on compense un petit `eta` par plus d'arbres.)
 
-Non, environ 24 % de retards contre environ 76 % à l'heure.
+**Section 4 — `max_depth` (profondeur).**
+Non, des arbres plus profonds ne généralisent pas forcément mieux. Avec `max_depth = 12`, l'AUC train devient très élevée mais l'AUC test est nettement en dessous : **l'écart train/test se creuse**. C'est du **surapprentissage (overfitting)** : le modèle mémorise le bruit des données d'entraînement au lieu d'apprendre des règles générales. Des arbres trop profonds sont le principal levier de surapprentissage dans XGBoost.
 
-Avec des classes déséquilibrées, l'accuracy devient trompeuse. Un modèle qui prédirait "jamais en retard" pour tout le monde aurait déjà ~76 % d'accuracy sans rien apprendre, alors qu'il ne détecte aucun retard, donc il est inutile.
-Conclusion, c'est pour ça qu'on suit l'AUC et pas l'accuracy. L'AUC mesure la capacité à séparer les deux classes, sans se laisser berner par la classe majoritaire. Donc, devant une accuracy de 90 %, toujours se demander d'abord si les classes sont équilibrées.
+**Section 5 — `nrounds` (nombre d'arbres).**
+De 10 à 500 : l'AUC train continue de monter (le modèle colle de mieux en mieux au train), mais l'AUC **test plafonne** et finit par stagner, voire baisser. Le gain n'est pas infini : **rendement décroissant**. Ajouter des arbres au-delà d'un certain point n'améliore plus la généralisation et coûte du temps de calcul.
 
-**Question 2 — Même proportion dans train et test, pourquoi c'est bien ?**
+**Section 6 — validation croisée + arrêt anticipé.**
+Fixer `nrounds` à la main, c'est deviner. La validation croisée teste la performance sur des données non vues et **`early_stopping_rounds`** arrête d'ajouter des arbres dès que l'AUC de validation ne progresse plus pendant N tours. On obtient ainsi automatiquement un bon nombre d'arbres (`best_iteration`), sans tâtonner ni risquer de surapprendre en mettant trop d'arbres.
 
-Parce que le tirage est stratifié, train et test gardent la même proportion de retards ( environ 24 %). On évalue ainsi le modèle sur un échantillon représentatif de l'ensemble. Un tirage purement aléatoire pourrait, par malchance, sur- ou sous-représenter les retards dans le test et fausser la mesure de performance.
+## Note technique
 
+- Échantillon de 50 000 vols. Si les relances sont trop lentes en direct (plusieurs entraînements, surtout `max_depth = 12`), réduire `sample_n(50000)` à `20000`.
+- Packages : `dplyr`, `nycflights13`, `xgboost`, `pROC`, `caret`.
+- Ce TP se concentre sur `eta`, `max_depth`, `nrounds` (effet sur l'apprentissage), sans recouper le quizz Wooclap qui porte sur d'autres points (objective, évaluation sur X_test, best_iteration, régularisation, comparaison gbm). Le TP fait **manipuler et observer**, le quizz teste la **compréhension**.
