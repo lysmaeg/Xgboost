@@ -1,10 +1,8 @@
-# TP XGBoost à trou — Corrigé enseignant
-
-> Corrigé du notebook `TP_a_trou.ipynb`. Version centrée sur les **hyperparamètres et leur effet sur l'apprentissage**. Support présenté en classe (trous posés comme questions à la salle). À ne pas distribuer aux étudiants.
+# TP XGBoost à trou — Corrigé
 
 ## Réponses aux trous (valeurs à tester)
 
-Les trous sont des **valeurs à essayer** : l'objectif est d'observer l'effet, pas de trouver une seule bonne réponse. On lance avec la 1re valeur, puis la 2e, et on compare.
+On lance avec la 1re valeur, puis la 2e, et on compare.
 
 | Section | Trou | Valeurs à tester | Ce qu'on observe |
 | --- | --- | --- | --- |
@@ -28,8 +26,3 @@ De 10 à 500 : l'AUC train continue de monter (le modèle colle de mieux en mieu
 **Section 6 — validation croisée + arrêt anticipé.**
 Fixer `nrounds` à la main, c'est deviner. La validation croisée teste la performance sur des données non vues et **`early_stopping_rounds`** arrête d'ajouter des arbres dès que l'AUC de validation ne progresse plus pendant N tours. On obtient ainsi automatiquement un bon nombre d'arbres (`best_iteration`), sans tâtonner ni risquer de surapprendre en mettant trop d'arbres.
 
-## Note technique
-
-- Échantillon de 50 000 vols. Si les relances sont trop lentes en direct (plusieurs entraînements, surtout `max_depth = 12`), réduire `sample_n(50000)` à `20000`.
-- Packages : `dplyr`, `nycflights13`, `xgboost`, `pROC`, `caret`.
-- Ce TP se concentre sur `eta`, `max_depth`, `nrounds` (effet sur l'apprentissage), sans recouper le quizz Wooclap qui porte sur d'autres points (objective, évaluation sur X_test, best_iteration, régularisation, comparaison gbm). Le TP fait **manipuler et observer**, le quizz teste la **compréhension**.
