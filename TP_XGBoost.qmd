@@ -1,12 +1,14 @@
 ---
-title: "TP XGBoost"
+title: "TP XGBoost — Des hyperparamètres au modèle final"
 format: html
 engine: knitr
 ---
 
-On va utiliser un vrai jeu de données assez volumineux : `nycflights13::flights` (environ 336 000 vols domestiques américains de 2013). Pour garder des temps d'exécution raisonnable, on n'utilisera que 50 000 vols.
+On utilise `nycflights13::flights` (vols domestiques américains de 2013). Pour garder des temps d'exécution raisonnables, on travaille sur 50 000 vols.
 
-**Objectif** : Prédire si un vol arrive avec un retard de plus de 15 minutes.
+**Objectif** : prédire si un vol arrive avec un retard de plus de 15 minutes.
+
+Ce TP suit le fil : préparer les données → entraîner un premier modèle → comprendre ce que font les principaux hyperparamètres → laisser la validation croisée régler le modèle → évaluer sur le test → comparer à `gbm`.
 
 ```{r}
 library(dplyr)
@@ -17,7 +19,7 @@ library(gbm)
 library(knitr)
 ```
 
-## Prétraitement des données
+## 1. Prétraitement des données
 
 Création de la variable cible `retard` qui vaut 1 si le retard à l'arrivée est strictement supérieur à 15 minutes et 0 sinon.
 
@@ -42,7 +44,7 @@ cat("Proportion de vols en retard :", prop * 100, "%")
 dummies <- caret::dummyVars(retard ~ ., data = flights_clean, fullRank = TRUE)
 ```
 
-## Séparation des données en deux échantillons train et test
+## 2. Séparation en échantillons train et test
 
 ```{r}
 set.seed(123)
@@ -51,8 +53,8 @@ idx <- as.vector(caret::createDataPartition(factor(flights_clean$retard), p = 0.
 train_flights <- flights_clean[idx, ]
 test_flights <- flights_clean[-idx, ]
 
-cat("Proportion de vols en retard sur les données d'entrainement :", round(mean(train_flights$retard), 4) * 100, "%\n")
-cat("Proportion de vols en retard sur les données de test :", round(mean(test_flights$retard), 4) * 100, "%")
+cat("Proportion de retard - train :", round(mean(train_flights$retard), 4) * 100, "%\n")
+cat("Proportion de retard - test  :", round(mean(test_flights$retard), 4) * 100, "%")
 
 X_train <- predict(dummies, newdata = train_flights)
 y_train <- train_flights$retard
@@ -60,26 +62,24 @@ X_test <- predict(dummies, newdata = test_flights)
 y_test <- test_flights$retard
 ```
 
-**Question** : Pourquoi est-ce qu'on s'assure qu'il y ait la même proportion de retard dans le train et le test ?
+**Question** : Pourquoi s'assure-t-on d'avoir la même proportion de retard dans le train et le test ?
 
 <details>
 <summary>Voir la réponse</summary>
 
-On utilise un tirage stratifié (`createDataPartition` sur la variable `retard`) plutôt qu'un tirage purement aléatoire pour que le train et le test aient la même proportion de vols en retard (~24%).
+On utilise un tirage stratifié (`createDataPartition` sur `retard`) plutôt qu'un tirage purement aléatoire pour que train et test aient la même proportion de vols en retard (~24 %).
 
-Sans cette précaution, un tirage aléatoire pourrait donner par hasard un test set avec une proportion de retards assez différente de celle du train, surtout que la classe "retard" est minoritaire. Cela rendrait les métriques de performance (AUC, accuracy) moins fiables et plus difficiles à comparer d'une exécution à l'autre, puisqu'une partie de la variation observée viendrait du déséquilibre entre train et test plutôt que de la qualité du modèle lui-même.
+Sans cette précaution, un tirage aléatoire pourrait donner par hasard un test set avec une proportion de retards assez différente de celle du train, surtout que la classe "retard" est minoritaire. Les métriques (AUC, accuracy) seraient alors moins fiables et moins comparables d'une exécution à l'autre, car une partie de la variation viendrait du déséquilibre train/test plutôt que du modèle.
 
 </details>
 
-## Premier modèle XGBoost (avec paramètres fixés)
+## 3. Premier modèle XGBoost (paramètres fixés)
 
-Entraînement d'un premier modèle de classification binaire, en suivant l'AUC comme métrique, avec un taux d'apprentissage de 0.1 et 100 arbres.
+Entraînement d'un premier modèle de classification binaire, avec un taux d'apprentissage de 0.1 et 100 arbres, en suivant l'AUC d'apprentissage.
 
 ```{r}
 nb_coeurs <- parallel::detectCores()
-```
 
-```{r}
 boost_1 <- xgboost(data = X_train,
                    label = y_train,
                    nrounds = 100,
@@ -90,35 +90,104 @@ boost_1 <- xgboost(data = X_train,
                                  eta = 0.1,
                                  nthread = nb_coeurs - 1))
 
-boost_1
-```
-
-```{r}
 plot(boost_1$evaluation_log,
-     xlab = "Nombre d'arbres",
-     ylab = "AUC",
+     xlab = "Nombre d'arbres", ylab = "AUC",
      main = "Evolution de l'AUC d'apprentissage",
-     col = "red",
-     type = "l")
+     col = "red", type = "l")
 grid(nx = NULL, ny = NULL, col = "lightgray")
 ```
 
-**Question** : D'après le graphique ci-dessus, comment évalue l'AUC d'apprentissage lorsque le nombre d'arbre augmente ? Cette AUC mesuré sur les données d'apprentissage permet-elle de conclure sur la qualité du modèle sur de nouvelles données ?
+**Question** : Comment évolue l'AUC d'apprentissage quand le nombre d'arbres augmente ? Cette AUC mesurée sur les données d'apprentissage permet-elle de conclure sur la qualité du modèle sur de nouvelles données ?
 
 <details>
 <summary>Voir la réponse</summary>
 
-Le `evaluation_log` montre l'AUC d'apprentissage passer d'environ 0.91 pour 1 arbre à environ 0.96 pour 100 arbres : le modèle apprend progressivement.
+L'`evaluation_log` montre l'AUC d'apprentissage passer d'environ 0.91 (1 arbre) à environ 0.96 (100 arbres) : le modèle apprend progressivement.
 
-Cette AUC est mesurée sur l'apprentissage donc il peut y avoir du surapprentissage. On va donc faire une validation croisée pour choisir le bon nombre d'arbre.
+Mais cette AUC est mesurée sur l'apprentissage : elle peut cacher du surapprentissage. On ne peut pas conclure sur de nouvelles données avec elle. C'est exactement ce qu'on va explorer à la section suivante, puis corriger par validation croisée.
 
 </details>
 
-## Sélection du nombre d'itération (nombre d'arbres) par validation croisée
+## 4. Comprendre les hyperparamètres
+
+Avant de laisser un algorithme régler le modèle, regardons **ce que fait chaque hyperparamètre**. On écrit une fonction qui entraîne un modèle et affiche l'**AUC sur le train ET sur le test** : comparer les deux est la clé pour repérer le surapprentissage.
+
+```{r}
+evaluer <- function(eta = 0.1, max_depth = 6, nrounds = 100) {
+  m <- xgboost(data = X_train, label = y_train,
+               objective = "binary:logistic",
+               eta = eta, max_depth = max_depth, nrounds = nrounds,
+               nthread = nb_coeurs - 1, verbose = 0)
+  a_train <- auc(roc(y_train, predict(m, X_train), quiet = TRUE))
+  a_test  <- auc(roc(y_test,  predict(m, X_test),  quiet = TRUE))
+  cat("eta =", eta, "| max_depth =", max_depth, "| nrounds =", nrounds, "\n")
+  cat("   AUC train =", round(a_train, 4), " | AUC test =", round(a_test, 4), "\n")
+}
+
+# Référence
+evaluer()
+```
+
+### 4.1 Le taux d'apprentissage (`eta`)
+
+`eta` règle le poids de chaque nouvel arbre dans l'ensemble.
+
+**Question** : avec un `eta` très petit (0.01) et seulement 100 arbres, le modèle apprend-il mieux ou moins bien qu'avec `eta = 0.3` ?
+
+```{r}
+evaluer(eta = 0.01)
+evaluer(eta = 0.3)
+```
+
+<details>
+<summary>Voir la réponse</summary>
+
+`eta` fixe la vitesse d'apprentissage. Avec `eta = 0.01` et seulement 100 arbres, chaque arbre contribue très peu : le modèle n'a pas le temps de converger et sous-apprend (AUC train et test plus basses). Avec `eta = 0.3`, il apprend plus vite et atteint de meilleures AUC en 100 arbres. Un `eta` plus petit n'est pas mauvais en soi : il faut simplement plus d'arbres pour compenser. Petit `eta` + beaucoup d'arbres donne souvent une meilleure généralisation, mais coûte plus cher en calcul.
+
+</details>
+
+### 4.2 La profondeur des arbres (`max_depth`)
+
+`max_depth` contrôle la complexité de chaque arbre.
+
+**Question** : avec des arbres très profonds (`max_depth = 12`), le modèle va-t-il forcément mieux généraliser ?
+
+```{r}
+evaluer(max_depth = 3)
+evaluer(max_depth = 12)
+```
+
+<details>
+<summary>Voir la réponse</summary>
+
+Avec `max_depth = 12`, l'AUC train grimpe très haut mais l'AUC test stagne ou baisse : l'écart entre les deux se creuse. C'est du **surapprentissage** — les arbres profonds mémorisent le bruit du train au lieu de capturer des règles générales. Des arbres plus modestes (`max_depth = 3`) généralisent souvent mieux. La bonne profondeur se choisit, elle ne se maximise pas.
+
+</details>
+
+### 4.3 Le nombre d'arbres (`nrounds`)
+
+**Question** : plus on ajoute d'arbres, mieux c'est ? Jusqu'où ?
+
+```{r}
+evaluer(nrounds = 10)
+evaluer(nrounds = 500)
+```
+
+<details>
+<summary>Voir la réponse</summary>
+
+De 10 à 500 arbres, l'AUC train continue de monter (elle peut presque atteindre 1). L'AUC test progresse d'abord nettement, puis plafonne : **le gain est décroissant** et au-delà d'un certain point, ajouter des arbres n'améliore plus le test (et peut le dégrader). D'où l'intérêt d'un critère automatique pour s'arrêter au bon moment.
+
+</details>
+
+Régler ces trois leviers à la main est fastidieux. On laisse maintenant la **validation croisée** choisir, en commençant par le nombre d'arbres.
+
+## 5. Sélection du nombre d'arbres par validation croisée
 
 ```{r}
 X_mat <- xgb.DMatrix(X_train, label = y_train)
 
+set.seed(123)
 sel_xgb <- xgb.cv(data = X_mat,
                   tree_method = "hist",
                   params = list(objective = "binary:logistic",
@@ -135,18 +204,18 @@ sel_xgb$evaluation_log |> head()
 sel_xgb$niter
 ```
 
-**Question** : Que représente l'objet `ite_opt_demo` ? Pourquoi peut-il être inférieur à 300 ?
+**Question** : Que représente `ite_opt_demo` ? Pourquoi peut-il être inférieur à 300 ?
 
 <details>
 <summary>Voir la réponse</summary>
 
-`ite_opt_demo` représente le nombre d'arbres optimal (meilleure itération) sélectionné par validation croisée pour la profondeur par défaut : c'est l'itération à laquelle l'AUC moyenne de test (sur les folds de la CV) est maximale.
+`ite_opt_demo` est le nombre d'arbres optimal (meilleure itération) sélectionné par validation croisée pour la profondeur par défaut : l'itération où l'AUC moyenne de test (sur les folds) est maximale.
 
-Il peut être inférieur à 300 car on utilise `early_stopping_rounds = 10` : la validation croisée arrête l'entraînement dès que l'AUC de test ne s'améliore plus pendant 10 itérations consécutives, ce qui évite de continuer à ajouter des arbres inutiles (et donc de surapprendre).
+Il peut être inférieur à 300 grâce à `early_stopping_rounds = 10` : la CV arrête l'entraînement dès que l'AUC de test ne s'améliore plus pendant 10 itérations consécutives, ce qui évite d'ajouter des arbres inutiles (et de surapprendre). C'est la version automatique de ce qu'on observait à la main en section 4.3.
 
 </details>
 
-### Validation croisée sur le nombre d'arbres et la profondeur
+### 5.1 Validation croisée sur le nombre d'arbres et la profondeur
 
 ```{r}
 profondeurs <- c(2, 3, 4, 6, 8)
@@ -180,9 +249,9 @@ cat("Profondeur optimale :", profondeur_opt,
     "- AUC CV :", round(meilleur$auc_cv, 4), "\n")
 ```
 
-Pour faire la validation croisé aussi sur les paramètre `gamma`, `lambda` et `alpha`, c'est le même principe que pour `max_depth`. Il suffit de créer une grille qui prend toutes les combinaisons de (`max_depth`, `gamma`, `lambda`, `alpha`) avec `expand.grid`. Ce n'est pas forcement utile ici car on a déjà une AUC de 0.95 et que le gain apporté par `gamma`, `lambda` et `alpha` est généralement faible. De plus de temps de calcul augmente très rapidement.
+Pour faire la validation croisée aussi sur `gamma`, `lambda` et `alpha`, c'est le même principe : on crée une grille de toutes les combinaisons avec `expand.grid`. Ce n'est pas forcément utile ici (on a déjà une AUC de ~0.95 et le gain est généralement faible), et le temps de calcul augmente très vite.
 
-## Modèle final et performance sur l'échantillon de test
+## 6. Modèle final et performance sur le test
 
 ```{r}
 boost_opt <- xgboost(data = X_train,
@@ -201,36 +270,34 @@ roc_flights <- roc(y_test, prev_opt, quiet = TRUE)
 cat("AUC test :", round(auc(roc_flights), 3), "\n")
 cat("Accuracy test :", round(mean((prev_opt > 0.5) == y_test), 3), "\n")
 
-plot(roc_flights,
-     main = "Courbe ROC",
-     col = "red")
+plot(roc_flights, main = "Courbe ROC", col = "red")
 ```
 
-**Question** : Comparer l'AUC de test obtenue ici avec l'AUC d'apprentissage observée précédement. Que pouvez-vous en conclure sur le risque de surapprentissage du premier modèle par rapport au modèle final ?
+**Question** : Comparez l'AUC de test avec l'AUC d'apprentissage du premier modèle. Que conclure sur le risque de surapprentissage du premier modèle par rapport au modèle final ?
 
 <details>
 <summary>Voir la réponse</summary>
 
-L'AUC d'apprentissage du premier modèle (sans validation croisée, 100 arbres fixés) atteignait environ 0.96-0.965 sur les données d'entraînement elles-mêmes, un chiffre optimiste puisqu'il est mesuré sur les données qui ont servi à ajuster le modèle.
+L'AUC d'apprentissage du premier modèle (100 arbres fixés) atteignait ~0.96-0.965 sur le train lui-même, chiffre optimiste car mesuré sur les données ayant servi à ajuster le modèle.
 
-L'AUC obtenue ici sur le jeu de test avec le modèle final (profondeur et nombre d'arbres choisis par CV) est de 0.95, très proche de l'AUC de validation croisée trouvée précédemment (0.948). Le fait que l'AUC de test soit proche de l'AUC de CV, et nettement inférieure à l'AUC d'apprentissage brute du premier modèle, montre que la validation croisée a permis de choisir des hyperparamètres qui limitent le surapprentissage : le modèle final généralise bien, alors que le premier modèle (100 arbres fixes, sans contrôle de la profondeur ni early stopping) était plus à risque de surapprendre.
+L'AUC de test du modèle final (profondeur et nombre d'arbres choisis par CV) est ~0.95, très proche de l'AUC de CV (~0.948). Cette proximité test/CV, et l'écart avec l'AUC d'apprentissage brute du premier modèle, montrent que la validation croisée a choisi des hyperparamètres qui limitent le surapprentissage : le modèle final généralise bien, alors que le premier (100 arbres fixes, sans contrôle de profondeur ni early stopping) était plus à risque.
 
 </details>
 
-**Question** : L'accuracy calculé ici utilise un seuil de 0.5 pour transformer la probabilité prédite en décision. Ce seuil est-il forcément le plus adapté dans ce contexte ?
+**Question** : L'accuracy utilise ici un seuil de 0.5 pour transformer la probabilité en décision. Ce seuil est-il forcément le plus adapté ?
 
 <details>
 <summary>Voir la réponse</summary>
 
-Non, pas forcément. Le seuil de 0.5 n'a rien de spécial statistiquement : il revient à classer "retard" dès que la probabilité prédite dépasse 50%, ce qui n'est optimal que si les deux types d'erreurs (faux positifs et faux négatifs) ont le même coût et que les classes sont équilibrées.
+Non, pas forcément. Le seuil de 0.5 n'a rien de spécial : il revient à classer "retard" dès que la probabilité dépasse 50 %, ce qui n'est optimal que si les deux types d'erreurs (faux positifs, faux négatifs) ont le même coût et que les classes sont équilibrées.
 
-Ici, seulement environ 24% des vols sont en retard : les classes sont déséquilibrées, donc un seuil de 0.5 peut conduire à prédire rarement la classe minoritaire, même si le modèle discrimine bien (AUC élevée). Le choix du seuil devrait plutôt dépendre du contexte métier : coût d'un faux négatif par rapport à un faux positif, plutôt que de se fier par défaut à l'accuracy avec un seuil à 0.5.
+Ici, ~24 % des vols seulement sont en retard : les classes sont déséquilibrées, donc un seuil de 0.5 peut conduire à rarement prédire la classe minoritaire, même si le modèle discrimine bien (AUC élevée). Le seuil devrait dépendre du contexte métier (coût d'un faux négatif vs un faux positif) plutôt que d'être fixé par défaut à 0.5.
 
 </details>
 
-## Comparaison avec le Gradient boosting
+## 7. Comparaison avec le Gradient Boosting (`gbm`)
 
-On va comparer la vitesse puis les performances des deux modèles avec les mêmes paramètres.
+On compare la vitesse puis les performances des deux modèles avec les mêmes hyperparamètres.
 
 ```{r}
 n_trees <- 300
@@ -238,45 +305,30 @@ depth <- 6
 learning_rate <- 0.1
 
 time_gbm <- system.time({
-  model_gbm <- gbm(
-    retard ~ .,
-    data = train_flights,
-    distribution = "bernoulli",
-    n.trees = n_trees,
-    interaction.depth = depth,
-    shrinkage = learning_rate,
-    verbose = 0
-  )
+  model_gbm <- gbm(retard ~ ., data = train_flights,
+                   distribution = "bernoulli",
+                   n.trees = n_trees, interaction.depth = depth,
+                   shrinkage = learning_rate, verbose = 0)
 })
 
 time_xgb <- system.time({
-  model_xgb <- xgb.train(
-    data = X_mat,
-    tree_method = "hist",
-    objective = "binary:logistic",
-    nrounds = n_trees,
-    max_depth = depth,
-    eta = learning_rate,
-    nthread = 1,
-    verbose = 0
-  )
+  model_xgb <- xgb.train(data = X_mat, tree_method = "hist",
+                         objective = "binary:logistic",
+                         nrounds = n_trees, max_depth = depth,
+                         eta = learning_rate, nthread = 1, verbose = 0)
 })
 
-time <- data.frame(
-  modele = c("gbm", "xgboost"),
-  temps_sec = c(time_gbm[["elapsed"]], time_xgb[["elapsed"]])
-)
+time <- data.frame(modele = c("gbm", "xgboost"),
+                   temps_sec = c(time_gbm[["elapsed"]], time_xgb[["elapsed"]]))
 kable(time, digits = 3, caption = "Temps d'entraînement (secondes)")
 ```
 
-**Question** : D'après le tableau ci-dessus, quel algorithme s'entraîne le plus rapidement sur ces données, à hyperparamètres égaux ? Cela correspond-il à ce qui est généralement présenté comme un avantage de XGBoost ?
+**Question** : Quel algorithme s'entraîne le plus vite à hyperparamètres égaux ? Cela correspond-il à un avantage classiquement mis en avant pour XGBoost ?
 
 <details>
 <summary>Voir la réponse</summary>
 
-XGBoost s'entraîne nettement plus vite ici (environ 2 secondes contre 8 secondes pour `gbm`, à hyperparamètres identiques), soit un facteur d'environ 4.
-
-Oui, cela correspond à l'un des avantages classiquement mis en avant pour XGBoost : son implémentation est optimisée et parallélisée (ici via `tree_method = "hist"` et l'utilisation de plusieurs cœurs avec `nthread`), alors que `gbm` utilise un algorithme plus classique, séquentiel et mono-thread. C'est l'un des arguments qui a motivé la popularité de XGBoost par rapport aux implémentations plus anciennes de gradient boosting.
+XGBoost s'entraîne nettement plus vite (quelques secondes contre ~19 s pour `gbm`), soit un facteur d'environ 4 à 7. Oui, c'est l'un des avantages classiques de XGBoost : implémentation optimisée et parallélisée (`tree_method = "hist"`, plusieurs cœurs via `nthread`), alors que `gbm` utilise un algorithme plus classique, séquentiel et mono-thread.
 
 </details>
 
@@ -290,10 +342,8 @@ roc_xgb <- roc(y_test, pred_xgb, quiet = TRUE)
 perf <- data.frame(
   modele   = c("gbm", "xgboost"),
   AUC      = c(auc(roc_gbm), auc(roc_xgb)),
-  accuracy = c(
-    mean((pred_gbm > 0.5) == y_test),
-    mean((pred_xgb > 0.5) == y_test)
-  )
+  accuracy = c(mean((pred_gbm > 0.5) == y_test),
+               mean((pred_xgb > 0.5) == y_test))
 )
 kable(perf, digits = 3, caption = "Performance sur le jeu de test")
 
@@ -302,13 +352,21 @@ lines(roc_xgb, col = "red")
 legend("bottomright", legend = c("gbm", "xgboost"), col = c("blue", "red"), lwd = 2)
 ```
 
-**Question** : Comparez l'AUC et l'accuracy des deux modèles sur le jeu de test. Les différences observées sont-elles importantes ? Ce résultat signifie-t-il que XGBoost sera toujours plus performant que le Gradient Boosting classique, sur n'importe quel jeu de données ?
+**Question** : Comparez l'AUC et l'accuracy des deux modèles. Les différences sont-elles importantes ? XGBoost sera-t-il toujours plus performant que le Gradient Boosting classique ?
 
 <details>
 <summary>Voir la réponse</summary>
 
-Sur le jeu de test, on obtient AUC = 0.945 et accuracy = 0.914 pour `gbm`, contre AUC = 0.950 et accuracy = 0.917 pour `xgboost`. Les écarts sont faibles (0.005 point d'AUC, 0.003 point d'accuracy) et probablement peu significatifs en pratique : ils entrent dans la variabilité qu'on peut observer entre deux exécutions ou deux échantillonnages différents.
+On obtient AUC ≈ 0.945 / accuracy ≈ 0.914 pour `gbm`, contre AUC ≈ 0.950 / accuracy ≈ 0.917 pour `xgboost`. Les écarts sont faibles (~0.005 d'AUC) et probablement peu significatifs : ils entrent dans la variabilité entre deux exécutions ou deux échantillonnages.
 
-Non, ce résultat ne permet pas de conclure que XGBoost sera toujours plus performant que le Gradient Boosting classique. Ici, les deux modèles ont été entraînés avec exactement les mêmes hyperparamètres, sans réglage spécifique à chaque algorithme, et sur un seul jeu de données. Les performances prédictives dépendent fortement des données, du réglage des hyperparamètres propres à chaque méthode et de la régularisation choisie : sur d'autres jeux de données, ou avec un réglage plus poussé de `gbm`, les résultats pourraient être différents, voire inversés. L'avantage de XGBoost tient surtout à des aspects pratiques (vitesse, gestion native des valeurs manquantes, régularisation intégrée, flexibilité) plutôt qu'à une supériorité garantie en termes de pouvoir prédictif brut.
+Non, on ne peut pas conclure que XGBoost sera toujours meilleur. Les deux modèles ont été entraînés avec exactement les mêmes hyperparamètres, sans réglage propre à chacun, sur un seul jeu de données. Les performances dépendent fortement des données, du réglage et de la régularisation : ailleurs, ou avec un `gbm` mieux réglé, les résultats pourraient s'inverser. L'avantage de XGBoost tient surtout à des aspects pratiques (vitesse, gestion native des valeurs manquantes, régularisation intégrée, flexibilité) plutôt qu'à une supériorité garantie en pouvoir prédictif brut.
 
 </details>
+
+## Conclusion
+
+- **`eta`** (taux d'apprentissage) : trop petit → apprentissage lent (sous-apprentissage si peu d'arbres) ; plus grand → apprend plus vite.
+- **`max_depth`** : trop grand → arbres complexes qui surapprennent (AUC train ↑↑, AUC test qui stagne ou baisse).
+- **`nrounds`** : plus d'arbres aide, mais à rendement décroissant ; au-delà d'un point, le test ne progresse plus.
+- **Validation croisée + arrêt anticipé** : choisit automatiquement un bon nombre d'arbres et une bonne profondeur, sans tâtonner.
+- **XGBoost vs gbm** : à hyperparamètres égaux, performances proches ; l'avantage de XGBoost est surtout pratique (vitesse, régularisation, valeurs manquantes).
