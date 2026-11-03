@@ -72,5 +72,13 @@ Lesquels de ces points sont des avantages de XGBoost ?
 
 *Explication : régularisation, parallélisation et validation croisée intégrée sont bien des atouts de XGBoost. En revanche, rien ne garantit une meilleure performance, sur ce TP, son AUC est quasi identique à celle de gbm, il est surtout plus rapide et plus flexible, pas automatiquement plus précis.*
 
+## Q6,(choix multiple -plusieurs faux)
+En quoi la parallélisation est elle efficace ?
+- Pour le calcul des gradiant
+- Pour construire les arbres simultanément
+- **Evaluer la meilleur coupure pour chaque variable pour la construction d'un arbre**
+
+
+
 ---
 
