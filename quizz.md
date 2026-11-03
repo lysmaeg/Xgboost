@@ -18,6 +18,7 @@ L'objectif est `Loss(ensemble boosting) < Loss(premier arbre)`. Que représente 
 
 *Explication : `n` règle le poids de chaque nouvel arbre ajouté. Plus il est petit, plus l'apprentissage est lent mais stable.*
 
+
 ---
 
 ## Q2, (choix unique)
@@ -74,9 +75,10 @@ Lesquels de ces points sont des avantages de XGBoost ?
 
 ## Q6,(choix multiple -plusieurs faux)
 En quoi la parallélisation est elle efficace ?
-- Pour le calcul des gradiant
+- **Pour le calcul des gradiant et de la Hessienne**
 - Pour construire les arbres simultanément
 - **Evaluer la meilleur coupure pour chaque variable pour la construction d'un arbre**
+- 
 
 
 
